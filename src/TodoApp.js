@@ -1,52 +1,73 @@
-import React, { useState } from 'react';
-import { createTodo, getAllTodos } from './hedera';
+import React, { useState } from "react";
+import { createTodo, getAllTodos, createTodoFile } from "./hedera";
 
-const TodoApp = () => {
-  const [task, setTask] = useState('');
-  const [todos, setTodos] = useState([]);
+function TodoApp() {
+    const [task, setTask] = useState("");
+    const [tasks, setTasks] = useState([]);
+    const [fileId, setFileId] = useState(null);
 
-  const handleAddTask = async (e) => {
-    e.preventDefault();
-    if (!task) return; // Prevent adding empty tasks
-    try {
-      await createTodo(task);
-      setTask(''); // Clear input field
-      await handleGetAllTasks(); // Refresh the todo list
-    } catch (error) {
-      console.error("Error adding task:", error);
-    }
-  };
+    const handleAddTask = async () => {
+        if (!fileId) {
+            alert("File ID not set. Create the ToDo file first.");
+            return;
+        }
 
-  const handleGetAllTasks = async () => {
-    try {
-      const allTodos = await getAllTodos();
-      setTodos(allTodos);
-    } catch (error) {
-      console.error("Error fetching tasks:", error);
-    }
-  };
+        try {
+            await createTodo(fileId, task);
+            alert("Task added successfully");
+        } catch (error) {
+            console.error("Error adding task:", error);
+            alert(`Error adding task: ${error.message}`);
+        }
+    };
 
-  return (
-    <div>
-      <h1>ToDo App</h1>
-      <form onSubmit={handleAddTask}>
-        <input 
-          type="text" 
-          value={task} 
-          onChange={(e) => setTask(e.target.value)} 
-          placeholder="Add a new task" 
-        />
-        <button type="submit">Add Task</button>
-      </form>
-      <h2>Your Tasks</h2>
-      <ul>
-        {todos.map((todo, index) => (
-          <li key={index}>{todo}</li>
-        ))}
-      </ul>
-      <button onClick={handleGetAllTasks}>Get All Tasks</button>
-    </div>
-  );
-};
+    const handleGetAllTasks = async () => {
+        if (!fileId) {
+            alert("File ID not set. Create the ToDo file first.");
+            return;
+        }
+
+        try {
+            const allTasks = await getAllTodos(fileId);
+            setTasks(allTasks);
+        } catch (error) {
+            console.error("Error fetching tasks:", error);
+            alert(`Error fetching tasks: ${error.message}`);
+        }
+    };
+
+    const handleCreateFile = async () => {
+        try {
+            const newFileId = await createTodoFile();
+            setFileId(newFileId.toString());
+            alert(`New file created with ID: ${newFileId}`);
+        } catch (error) {
+            console.error("Error creating file:", error);
+            alert(`Error creating file: ${error.message}`);
+        }
+    };
+
+    return (
+        <div>
+            <h1>Hedera ToDo App</h1>
+            <input
+                type="text"
+                value={task}
+                onChange={(e) => setTask(e.target.value)}
+                placeholder="New Task"
+            />
+            <button onClick={handleAddTask}>Add Task</button>
+            <button onClick={handleGetAllTasks}>Get All Tasks</button>
+            <button onClick={handleCreateFile}>Create ToDo File</button>
+
+            <h2>ToDo List</h2>
+            <ul>
+                {tasks.map((task, index) => (
+                    <li key={index}>{task}</li>
+                ))}
+            </ul>
+        </div>
+    );
+}
 
 export default TodoApp;

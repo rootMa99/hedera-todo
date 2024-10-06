@@ -1,77 +1,73 @@
-import { Client, FileCreateTransaction, FileContentsQuery, PrivateKey, FileUpdateTransaction } from "@hashgraph/sdk";
+import {
+  Client,
+  PrivateKey,
+  AccountId,
+  FileCreateTransaction,
+  FileAppendTransaction,
+  FileContentsQuery,
+} from "@hashgraph/sdk";
 
-let todosListFileId = ""; // Initialize variable to store file ID
-
-// Initialize Hedera Client
+// Setting up Hedera client
 export const hederaClient = () => {
-  const client = Client.forTestnet();
-  const accountId = process.env.REACT_APP_HEDERA_ACCOUNT_ID;
-  const privateKey = process.env.REACT_APP_HEDERA_PRIVATE_KEY;
-
-  if (!accountId || !privateKey) {
-    throw new Error("Account ID or Private Key is not defined in the environment variables.");
+  if (!process.env.REACT_APP_HEDERA_ACCOUNT_ID || !process.env.REACT_APP_HEDERA_PRIVATE_KEY) {
+      throw new Error("Missing REACT_APP_HEDERA_ACCOUNT_ID or REACT_APP_HEDERA_PRIVATE_KEY in environment variables");
   }
 
-  // Ensure the private key is processed correctly
-  const key = PrivateKey.fromStringED25519(privateKey); // Use fromStringED25519 for ED25519 keys
-  client.setOperator(accountId, key);
+  const accountId = AccountId.fromString(process.env.REACT_APP_HEDERA_ACCOUNT_ID);
+  const privateKey = PrivateKey.fromString(process.env.REACT_APP_HEDERA_PRIVATE_KEY);
+
+  const client = Client.forTestnet();
+  client.setOperator(accountId, privateKey);
+
   return client;
 };
 
-// Function to create a list file if it doesn't exist
-const ensureTodosListFile = async (client) => {
-  if (!todosListFileId) {
-    const fileCreateTx = await new FileCreateTransaction()
-      .setContents("") // Start with an empty list
+// Create a new file for storing ToDos
+export const createTodoFile = async () => {
+  const client = hederaClient();
+
+  const transaction = await new FileCreateTransaction()
+      .setKeys([PrivateKey.fromString(process.env.REACT_APP_HEDERA_PRIVATE_KEY)])
+      .setContents("Initial ToDo List")
       .execute(client);
-    const receipt = await fileCreateTx.getReceipt(client);
-    todosListFileId = receipt.fileId.toString(); // Store the created File ID
-    console.log("Created ToDo List File ID:", todosListFileId); // Log the created File ID
-  } else {
-    console.log("ToDo List File ID already exists:", todosListFileId);
-  }
+
+  const receipt = await transaction.getReceipt(client);
+  const fileId = receipt.fileId;
+  console.log("File created with ID:", fileId);
+
+  return fileId;
 };
 
-// Function to create a new ToDo
-export const createTodo = async (todo) => {
-  const client = hederaClient();
-  await ensureTodosListFile(client); // Ensure the list file exists
-
-  const currentContents = await getTodo(todosListFileId); // Get current contents
-  const updatedContents = currentContents + (currentContents ? "," : "") + todo; // Append new todo
-  const fileUpdateTx = await new FileUpdateTransaction()
-    .setFileId(todosListFileId)
-    .setContents(updatedContents) // Update file with new todo
-    .execute(client);
-  await fileUpdateTx.getReceipt(client);
-  console.log("ToDo added:", todo);
-};
-
-// Function to retrieve a single ToDo
-export const getTodo = async (fileId) => {
-  const client = hederaClient();
-  const query = new FileContentsQuery()
-    .setFileId(fileId);
-  const contents = await query.execute(client);
-  return contents.toString(); // Return contents as string
-};
-
-// Function to retrieve all ToDos
-export const getAllTodos = async () => {
+// Add a new ToDo item
+export const createTodo = async (fileId, newTask) => {
   const client = hederaClient();
 
-  if (!todosListFileId) {
-    console.error("ToDo List File ID is undefined. Ensure that you have created the list file.");
-    throw new Error("ToDo List File ID is undefined. Ensure that you have created the list file.");
+  const transaction = await new FileAppendTransaction()
+      .setFileId(fileId)
+      .setContents(newTask + "\n")
+      .execute(client);
+
+  const receipt = await transaction.getReceipt(client);
+
+  if (receipt.status.toString() !== "SUCCESS") {
+      throw new Error(`Failed to add task: ${receipt.status}`);
   }
 
-  const todosIds = await getTodo(todosListFileId); // Get the list of all ToDo IDs
-  const todoIdArray = todosIds.split(',').map(id => id.trim()).filter(id => id); // Filter out empty IDs
+  console.log("Task added successfully");
+};
 
-  // Retrieve each ToDo's content
-  const todos = await Promise.all(todoIdArray.map(async (fileId) => {
-    return await getTodo(fileId);
-  }));
+export const getAllTodos = async (fileId) => {
+  const client = hederaClient();
 
-  return todos; // Return all ToDo contents
+  const query = await new FileContentsQuery()
+      .setFileId(fileId)
+      .execute(client);
+
+  // Convert the byte array (Uint8Array) to string
+  const content = new TextDecoder().decode(query);
+  
+  // Split content into tasks by line breaks and filter out any empty lines
+  const todos = content.split("\n").filter(Boolean);
+
+  return todos;
 };
